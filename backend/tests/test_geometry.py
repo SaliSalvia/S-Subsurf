@@ -12,9 +12,7 @@ def polygon(coords: list[list[float]]) -> PolygonGeometry:
 
 
 def test_small_square_has_expected_positive_area() -> None:
-    geometry = polygon([
-        [0.0, 0.0], [0.01, 0.0], [0.01, 0.01], [0.0, 0.01], [0.0, 0.0]
-    ])
+    geometry = polygon([[0.0, 0.0], [0.01, 0.0], [0.01, 0.01], [0.0, 0.01], [0.0, 0.0]])
     area, bbox, vertices = polygon_metrics(geometry)
     assert 1_200_000 < area < 1_300_000
     assert bbox == (0.0, 0.0, 0.01, 0.01)

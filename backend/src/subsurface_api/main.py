@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__
 from .geometry import polygon_metrics
 from .schemas import (
-    Capability,
     CapabilitiesResponse,
+    Capability,
     RegionValidationRequest,
     RegionValidationResponse,
 )
@@ -29,9 +29,7 @@ app = FastAPI(
 )
 
 allowed_origins = [
-    item.strip()
-    for item in os.getenv("CORS_ORIGINS", "").split(",")
-    if item.strip()
+    item.strip() for item in os.getenv("CORS_ORIGINS", "").split(",") if item.strip()
 ]
 if allowed_origins:
     app.add_middleware(

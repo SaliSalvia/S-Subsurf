@@ -57,7 +57,6 @@ def _point_in_ring(point: Coordinate, ring: list[Coordinate]) -> bool:
     return inside
 
 
-
 def _rings_intersect(first: list[Coordinate], second: list[Coordinate]) -> bool:
     """Return whether any edge from two open rings touches or crosses."""
     for first_index, a in enumerate(first):
@@ -130,7 +129,7 @@ class PolygonGeometry(StrictModel):
         return rings
 
     @model_validator(mode="after")
-    def reject_antimeridian_spanning_region(self) -> "PolygonGeometry":
+    def reject_antimeridian_spanning_region(self) -> PolygonGeometry:
         outer_lons = [point[0] for point in self.coordinates[0][:-1]]
         if outer_lons and max(outer_lons) - min(outer_lons) > 180.0:
             raise ValueError("Polygons crossing the antimeridian are not supported by this MVP.")

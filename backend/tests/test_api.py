@@ -75,6 +75,4 @@ def test_region_validation_rejects_zero_area() -> None:
         },
     )
     assert response.status_code == 422
-    assert any(
-        "reverse or overlap" in item["msg"] for item in response.json()["detail"]
-    )
+    assert any("reverse or overlap" in item["msg"] for item in response.json()["detail"])

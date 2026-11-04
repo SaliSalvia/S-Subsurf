@@ -24,3 +24,5 @@ htmlcov/
 !.env.example
 *.jks
 *.keystore
+
+*.egg-info/
