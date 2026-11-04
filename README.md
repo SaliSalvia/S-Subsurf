@@ -40,7 +40,7 @@ API documentation: `http://127.0.0.1:8000/docs`.
 
 ## Open the Android app
 
-Open `android/` in Android Studio with JDK 17+ and Android SDK 37 installed. The Gradle build uses Kotlin DSL, a version catalog, and Maven Central dependencies. This bootstrap contains the Gradle wrapper properties but not the generated wrapper scripts/JAR. Use an installed Gradle 9.5 distribution or run `gradle wrapper --gradle-version 9.5.0` once to generate a complete wrapper locally; the CI workflow installs Gradle directly.
+Open `android/` in Android Studio with JDK 17+ and Android SDK Platform 36 plus Build Tools 36.0.0 installed. The Gradle build uses Kotlin DSL, a version catalog, and Maven Central dependencies. This bootstrap contains the Gradle wrapper properties but not the generated wrapper scripts/JAR. Use an installed Gradle 9.5 distribution or run `gradle wrapper --gradle-version 9.5.0` once to generate a complete wrapper locally; the CI workflow installs Gradle directly.
 
 ### Connect the Android app to the backend
 

@@ -4,7 +4,7 @@
 
 - Android Studio compatible with AGP 9.3.1
 - JDK 17
-- Android SDK Platform 37 and Build Tools 36.0.0
+- Android SDK Platform 36 and Build Tools 36.0.0
 - Gradle 9.5.0
 
 The repository contains `gradle/wrapper/gradle-wrapper.properties`; generated wrapper scripts/JAR are not included in this bootstrap. If Gradle is installed locally, run `gradle wrapper --gradle-version 9.5.0` from this directory, then commit the generated `gradlew`, `gradlew.bat`, and `gradle/wrapper/gradle-wrapper.jar`. CI installs Gradle 9.5.0 directly.
