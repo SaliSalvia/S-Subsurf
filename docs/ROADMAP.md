@@ -16,10 +16,11 @@
 - Add a map-camera fit-to-region action and an editable vertex workflow.
 - Add request IDs and structured client/server request logs without telemetry.
 
-## Milestone 2 — One real data product
+## Milestone 2 — One real data product (catalogue search implemented)
 
-- Select one source based on access, licence, coverage, and API stability.
-- Implement catalogue search and a small-area download path.
+- **Done:** connect the official Copernicus Sentinel-2 L2A STAC search for validated AOI, time range, scene cloud-cover limit, and bounded pagination.
+- **Done:** preserve scene IDs, acquisition time, scene-level cloud estimate, platform, processing version, footprint, and band/quality asset metadata.
+- **Next:** establish authenticated CDSE asset access and a bounded small-area download path; search metadata alone is not image analysis.
 - Preserve source IDs, time, CRS, pixel spacing, processing baseline, and quality masks.
 - Build reproducible fixtures from openly licensed sample scenes.
 

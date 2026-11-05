@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -17,9 +20,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,20 +40,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import com.salisalvia.subsurface.core.geometry.PolygonMetrics
 import com.salisalvia.subsurface.core.model.GeoPoint
 import com.salisalvia.subsurface.data.remote.RegionValidationResult
+import com.salisalvia.subsurface.data.remote.Sentinel2CatalogResult
+import com.salisalvia.subsurface.data.remote.Sentinel2Scene
+import java.time.Instant
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     validationState: RegionValidationUiState,
+    catalogSearchState: CatalogSearchUiState,
     onValidateRegion: (List<GeoPoint>) -> Unit,
+    onSearchSentinel2: (List<GeoPoint>, Int, Int) -> Unit,
+    onLoadMoreSentinel2: () -> Unit,
     onDismissValidation: () -> Unit,
+    onDismissCatalogSearch: () -> Unit,
 ) {
     val vertices = remember { mutableStateListOf<GeoPoint>() }
     var isDrawing by rememberSaveable { mutableStateOf(false) }
+    var lookbackDays by rememberSaveable { mutableStateOf(90) }
+    var maxCloudCoverPercent by rememberSaveable { mutableStateOf(30f) }
 
     val validationError = remember(vertices.toList()) {
         PolygonMetrics.validationError(vertices)
@@ -142,6 +159,71 @@ fun MapScreen(
                         }
                     }
 
+                    if (catalogSearchState == CatalogSearchUiState.Loading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.width(18.dp).height(18.dp),
+                            )
+                            Text(
+                                "Searching the live Copernicus catalogue…",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+
+                    if (vertices.size >= 3 && validationError == null && !isDrawing) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Acquisition window", style = MaterialTheme.typography.labelMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(30, 90, 180).forEach { days ->
+                                    FilterChip(
+                                        selected = lookbackDays == days,
+                                        onClick = { lookbackDays = days },
+                                        label = { Text("$days days") },
+                                    )
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Max scene cloud: ${maxCloudCoverPercent.toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.width(148.dp),
+                                )
+                                Slider(
+                                    value = maxCloudCoverPercent,
+                                    onValueChange = { maxCloudCoverPercent = it },
+                                    valueRange = 0f..100f,
+                                    steps = 9,
+                                    enabled = catalogSearchState != CatalogSearchUiState.Loading,
+                                )
+                            }
+                            Button(
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = validationState != RegionValidationUiState.Loading &&
+                                    catalogSearchState != CatalogSearchUiState.Loading,
+                                onClick = {
+                                    onSearchSentinel2(
+                                        vertices.toList(),
+                                        lookbackDays,
+                                        maxCloudCoverPercent.toInt(),
+                                    )
+                                },
+                            ) {
+                                Text("Search Sentinel-2 catalogue")
+                            }
+                            Text(
+                                "Product metadata only · no image download or underground detection",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
                     if (isDrawing || vertices.isNotEmpty()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -207,7 +289,7 @@ fun MapScreen(
                     )
                     Spacer(Modifier.height(5.dp))
                     Text(
-                        "Region validation is connected. Satellite data ingestion is not connected yet.",
+                        "Live Sentinel-2 product metadata is searchable. Image assets are not downloaded.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -230,6 +312,25 @@ fun MapScreen(
             },
         )
         RegionValidationUiState.Idle, RegionValidationUiState.Loading -> Unit
+    }
+
+    when (val state = catalogSearchState) {
+        is CatalogSearchUiState.Success -> CatalogResultsDialog(
+            result = state.result,
+            isLoadingMore = state.isLoadingMore,
+            paginationError = state.paginationError,
+            onLoadMore = onLoadMoreSentinel2,
+            onDismiss = onDismissCatalogSearch,
+        )
+        is CatalogSearchUiState.Error -> AlertDialog(
+            onDismissRequest = onDismissCatalogSearch,
+            title = { Text("Catalogue search failed") },
+            text = { Text(state.message) },
+            confirmButton = {
+                Button(onClick = onDismissCatalogSearch) { Text("Close") }
+            },
+        )
+        CatalogSearchUiState.Idle, CatalogSearchUiState.Loading -> Unit
     }
 }
 
@@ -281,4 +382,160 @@ private fun formatArea(areaSquareMeters: Double?): String {
     } else {
         String.format(Locale.US, "%.0f m² (approx.)", areaSquareMeters)
     }
+}
+
+@Composable
+private fun CatalogResultsDialog(
+    result: Sentinel2CatalogResult,
+    isLoadingMore: Boolean,
+    paginationError: String?,
+    onLoadMore: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sentinel-2 products (${result.scenes.size})") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    result.scientificNotice,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    result.cloudCoverNote,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (result.scenes.isEmpty()) {
+                    Text(
+                        "No products matched these filters. Widen the date interval or increase the cloud-cover limit.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(result.scenes, key = Sentinel2Scene::productId) { scene ->
+                            CatalogSceneCard(scene)
+                        }
+                    }
+                }
+                if (result.omittedItemCount > 0) {
+                    Text(
+                        "${result.omittedItemCount} malformed provider record(s) were omitted.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Text(
+                    result.assetAccessNote,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (paginationError != null) {
+                    Text(
+                        paginationError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (result.nextCursor != null) {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isLoadingMore,
+                        onClick = onLoadMore,
+                    ) {
+                        if (isLoadingMore) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.width(16.dp).height(16.dp),
+                            )
+                        } else {
+                            Text("Load more products")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("Done") }
+        },
+    )
+}
+
+@Composable
+private fun CatalogSceneCard(scene: Sentinel2Scene) {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                scene.productId,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "${scene.platform ?: "Sentinel-2"} · ${formatUtc(scene.acquiredAt)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            scene.processingVersion?.let { version ->
+                Text(
+                    "Processing baseline: $version",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "Scene cloud cover: ${
+                    scene.cloudCoverPercent?.let { String.format(Locale.US, "%.1f%%", it) }
+                        ?: "not reported"
+                }",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            val assetLabels = scene.assets.take(8).joinToString { asset ->
+                asset.groundSamplingDistanceMeters?.let { "${asset.key} ${it}m" } ?: asset.key
+            }
+            if (assetLabels.isNotBlank()) {
+                Text(
+                    "Assets: $assetLabels",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (scene.requiresProviderAuthentication) {
+                Text(
+                    "Provider authentication may be required for asset access.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(scene.catalogItemUrl)),
+                        )
+                    }
+                },
+            ) {
+                Text("Open provider record")
+            }
+        }
+    }
+}
+
+private fun formatUtc(value: String): String {
+    val normalized = runCatching { Instant.parse(value).toString() }.getOrDefault(value)
+    return "${normalized.replace("T", " ").removeSuffix("Z")} UTC"
 }

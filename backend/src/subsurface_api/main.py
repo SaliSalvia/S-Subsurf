@@ -4,24 +4,31 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .catalog import (
+    CatalogProviderError,
+    CatalogTimeoutError,
+    Sentinel2Catalog,
+)
 from .geometry import polygon_metrics
 from .schemas import (
     CapabilitiesResponse,
     Capability,
     RegionValidationRequest,
     RegionValidationResponse,
+    Sentinel2CatalogSearchRequest,
+    Sentinel2CatalogSearchResponse,
 )
 
 app = FastAPI(
     title="SubsurfaceExplorer API",
     summary="Region geometry and evidence-aware geospatial project API",
     description=(
-        "The current API validates survey geometry only. It does not detect underground objects "
-        "or estimate burial depth."
+        "The API validates survey regions and searches Copernicus Sentinel-2 catalogue metadata. "
+        "It does not download image assets, detect underground objects, or estimate burial depth."
     ),
     version=__version__,
     docs_url="/docs",
@@ -63,8 +70,11 @@ def capabilities() -> CapabilitiesResponse:
             ),
             Capability(
                 id="sentinel_catalogue",
-                status="planned",
-                description="Provider catalogue search; not connected.",
+                status="available",
+                description=(
+                    "Live Copernicus Sentinel-2 L2A catalogue metadata search; image assets "
+                    "are not downloaded or analysed."
+                ),
             ),
             Capability(
                 id="raster_processing",
@@ -103,3 +113,32 @@ def validate_region(request: RegionValidationRequest) -> RegionValidationRespons
         bbox_wsen=(west, south, east, north),
         vertex_count=vertex_count,
     )
+
+
+def get_sentinel2_catalog() -> Sentinel2Catalog:
+    """Dependency seam for deterministic provider-mocked tests."""
+    return Sentinel2Catalog()
+
+
+@app.post(
+    "/v1/catalog/sentinel-2/search",
+    response_model=Sentinel2CatalogSearchResponse,
+    tags=["catalog"],
+)
+async def search_sentinel2_catalog(
+    request: Sentinel2CatalogSearchRequest,
+    catalog: Sentinel2Catalog = Depends(get_sentinel2_catalog),
+) -> Sentinel2CatalogSearchResponse:
+    """Search real Sentinel-2 L2A product metadata intersecting a validated survey polygon."""
+    try:
+        return await catalog.search(request)
+    except CatalogTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="The Copernicus catalogue did not respond in time; retry the search.",
+        ) from exc
+    except CatalogProviderError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The Copernicus catalogue is unavailable or returned invalid metadata.",
+        ) from exc

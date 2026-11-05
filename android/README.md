@@ -4,7 +4,7 @@
 
 - Android Studio compatible with AGP 9.3.1
 - JDK 17
-- Android SDK Platform 36 and Build Tools 36.0.0
+- Android SDK Platform 37.2 and Build Tools 36.0.0
 - Gradle 9.5.0
 
 The repository contains `gradle/wrapper/gradle-wrapper.properties`; generated wrapper scripts/JAR are not included in this bootstrap. If Gradle is installed locally, run `gradle wrapper --gradle-version 9.5.0` from this directory, then commit the generated `gradlew`, `gradlew.bat`, and `gradle/wrapper/gradle-wrapper.jar`. CI installs Gradle 9.5.0 directly.
@@ -19,7 +19,8 @@ The app pins MapLibre Native Android 13.7.1 using the OpenGL ES artifact to prio
 - Enable **Draw region**, tap 3–10 points, finish drawing, undo, or clear.
 - Area is an approximate spherical calculation; antimeridian-crossing polygons are not supported by this MVP.
 - **Review area** sends the drawn GeoJSON polygon to `POST /v1/regions/validate` and displays the server-validated vertex count, approximate area, and bounding box.
-- The app does not yet fetch satellite products or infer buried targets, target classes, confidence, or depth. Those capabilities remain disabled until scientifically validated data-processing providers are implemented.
+- **Sentinel-2 catalogue search** queries live Copernicus Data Space STAC metadata for the selected polygon, date interval, and scene-level cloud-cover limit.
+- The catalogue response contains product metadata only. It does not download imagery or infer buried targets, target classes, confidence, or depth.
 
 
 ## Backend connection

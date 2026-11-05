@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Coordinate = tuple[
+    Annotated[float, Field(ge=-180.0, le=180.0)],
+    Annotated[float, Field(ge=-90.0, le=90.0)],
+]
+Wgs84BoundingBox = tuple[
+    Annotated[float, Field(ge=-180.0, le=180.0)],
+    Annotated[float, Field(ge=-90.0, le=90.0)],
     Annotated[float, Field(ge=-180.0, le=180.0)],
     Annotated[float, Field(ge=-90.0, le=90.0)],
 ]
@@ -150,6 +157,60 @@ class PolygonGeometry(StrictModel):
 
 class RegionValidationRequest(StrictModel):
     geometry: PolygonGeometry
+
+
+class Sentinel2CatalogSearchRequest(StrictModel):
+    geometry: PolygonGeometry
+    datetime_start: datetime
+    datetime_end: datetime
+    max_cloud_cover_pct: float = Field(default=30.0, ge=0.0, le=100.0)
+    limit: int = Field(default=20, ge=1, le=50)
+    cursor: str | None = Field(default=None, min_length=1, max_length=1024)
+
+    @model_validator(mode="after")
+    def validate_search_window(self) -> Sentinel2CatalogSearchRequest:
+        if self.datetime_start.tzinfo is None or self.datetime_start.utcoffset() is None:
+            raise ValueError("datetime_start must include a timezone, preferably UTC.")
+        if self.datetime_end.tzinfo is None or self.datetime_end.utcoffset() is None:
+            raise ValueError("datetime_end must include a timezone, preferably UTC.")
+        if self.datetime_start >= self.datetime_end:
+            raise ValueError("datetime_start must be earlier than datetime_end.")
+        return self
+
+
+class Sentinel2AssetSummary(StrictModel):
+    key: str = Field(min_length=1, max_length=80)
+    gsd_m: int | None = Field(default=None, ge=1, le=1000)
+    roles: list[str] = Field(default_factory=list, max_length=8)
+
+
+class Sentinel2Scene(StrictModel):
+    product_id: str = Field(min_length=1, max_length=200)
+    collection: Literal["sentinel-2-l2a"] = "sentinel-2-l2a"
+    acquired_at: datetime
+    cloud_cover_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    platform: str | None = Field(default=None, max_length=80)
+    processing_version: str | None = Field(default=None, max_length=80)
+    bbox_wsen: Wgs84BoundingBox
+    assets: list[Sentinel2AssetSummary] = Field(default_factory=list, max_length=128)
+    asset_access: Literal["provider_authentication_required", "not_declared"]
+    catalog_item_url: str
+
+
+class Sentinel2CatalogSearchResponse(StrictModel):
+    source_catalog: Literal["Copernicus Data Space Ecosystem STAC"] = (
+        "Copernicus Data Space Ecosystem STAC"
+    )
+    collection: Literal["sentinel-2-l2a"] = "sentinel-2-l2a"
+    datetime_start: datetime
+    datetime_end: datetime
+    max_cloud_cover_pct: float = Field(ge=0.0, le=100.0)
+    items: list[Sentinel2Scene] = Field(max_length=50)
+    next_cursor: str | None = Field(default=None, max_length=1024)
+    omitted_item_count: int = Field(default=0, ge=0)
+    cloud_cover_note: str
+    asset_access_note: str
+    scientific_notice: str
 
 
 class RegionValidationResponse(StrictModel):

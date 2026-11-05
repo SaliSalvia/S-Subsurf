@@ -10,12 +10,12 @@ The repository bootstrap contains:
 
 - Native Android app (Kotlin, Jetpack Compose, Material 3, MapLibre Native).
 - Region sketching on an interactive map (3–10 vertices, undo, clear, area estimate).
-- FastAPI backend with health/capability endpoints and strict polygon validation.
+- FastAPI backend with strict polygon validation and live Sentinel-2 L2A catalog metadata search.
 - Android-to-API region-validation request with loading, success, and error states.
 - Python unit tests and CI workflows.
 - Scientific guardrails and a staged implementation roadmap.
 
-Satellite providers, user accounts, remote analysis, and anomaly interpretation are **not connected yet**. The UI does not fabricate results.
+Only Copernicus catalog metadata search is connected. Satellite asset downloads, user accounts, raster processing, remote analysis, and anomaly interpretation are **not connected yet**. The UI does not fabricate results.
 
 ## Repository layout
 
@@ -40,7 +40,7 @@ API documentation: `http://127.0.0.1:8000/docs`.
 
 ## Open the Android app
 
-Open `android/` in Android Studio with JDK 17+ and Android SDK Platform 36 plus Build Tools 36.0.0 installed. The Gradle build uses Kotlin DSL, a version catalog, and Maven Central dependencies. This bootstrap contains the Gradle wrapper properties but not the generated wrapper scripts/JAR. Use an installed Gradle 9.5 distribution or run `gradle wrapper --gradle-version 9.5.0` once to generate a complete wrapper locally; the CI workflow installs Gradle directly.
+Open `android/` in Android Studio with JDK 17+, Android SDK Platform 37.2, and Build Tools 36.0.0 installed. The Gradle build uses Kotlin DSL, a version catalog, and Maven Central dependencies. This bootstrap contains the Gradle wrapper properties but not the generated wrapper scripts/JAR. Use an installed Gradle 9.5 distribution or run `gradle wrapper --gradle-version 9.5.0` once to generate a complete wrapper locally; the CI workflow installs Gradle directly.
 
 ### Connect the Android app to the backend
 

@@ -44,6 +44,7 @@ Confidence is permitted only for a clearly defined and validated target variable
 ## Sources to validate during provider integration
 
 - Copernicus Data Space Ecosystem, Sentinel-2 product documentation: https://documentation.dataspace.copernicus.eu/Data/Sentinel2.html
+- Copernicus Data Space Ecosystem, STAC API: https://documentation.dataspace.copernicus.eu/APIs/STAC.html
 - MapLibre Native Android SDK: https://maplibre.org/maplibre-native/docs/book/platforms/android/
 - NASA Earthdata: https://www.earthdata.nasa.gov/
 - USGS EarthExplorer: https://earthexplorer.usgs.gov/

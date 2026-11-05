@@ -16,10 +16,15 @@ class MainActivity : ComponentActivity() {
             SubsurfaceTheme {
                 val mapViewModel: MapViewModel = viewModel()
                 val validationState = mapViewModel.validationState.collectAsStateWithLifecycle()
+                val catalogSearchState = mapViewModel.catalogSearchState.collectAsStateWithLifecycle()
                 MapScreen(
                     validationState = validationState.value,
+                    catalogSearchState = catalogSearchState.value,
                     onValidateRegion = mapViewModel::validateRegion,
+                    onSearchSentinel2 = mapViewModel::searchSentinel2Scenes,
+                    onLoadMoreSentinel2 = mapViewModel::loadMoreSentinel2Scenes,
                     onDismissValidation = mapViewModel::dismissValidation,
+                    onDismissCatalogSearch = mapViewModel::dismissCatalogSearch,
                 )
             }
         }
