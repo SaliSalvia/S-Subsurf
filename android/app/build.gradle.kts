@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.salisalvia.subsurface"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.salisalvia.subsurface"
