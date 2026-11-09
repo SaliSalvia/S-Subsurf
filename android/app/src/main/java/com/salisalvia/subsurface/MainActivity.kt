@@ -3,7 +3,6 @@ package com.salisalvia.subsurface
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.salisalvia.subsurface.feature.map.MapScreen
 import com.salisalvia.subsurface.feature.map.MapViewModel
@@ -14,18 +13,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             SubsurfaceTheme {
-                val mapViewModel: MapViewModel = viewModel()
-                val validationState = mapViewModel.validationState.collectAsStateWithLifecycle()
-                val catalogSearchState = mapViewModel.catalogSearchState.collectAsStateWithLifecycle()
-                MapScreen(
-                    validationState = validationState.value,
-                    catalogSearchState = catalogSearchState.value,
-                    onValidateRegion = mapViewModel::validateRegion,
-                    onSearchSentinel2 = mapViewModel::searchSentinel2Scenes,
-                    onLoadMoreSentinel2 = mapViewModel::loadMoreSentinel2Scenes,
-                    onDismissValidation = mapViewModel::dismissValidation,
-                    onDismissCatalogSearch = mapViewModel::dismissCatalogSearch,
-                )
+                val mapViewModel: MapViewModel = viewModel(factory = MapViewModel.Factory)
+                MapScreen(viewModel = mapViewModel)
             }
         }
     }

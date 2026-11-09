@@ -19,7 +19,9 @@ from subsurface_api.schemas import Sentinel2CatalogSearchRequest
 
 GEOMETRY = {
     "type": "Polygon",
-    "coordinates": [[[51.36, 35.66], [51.43, 35.66], [51.43, 35.73], [51.36, 35.73], [51.36, 35.66]]],
+    "coordinates": [
+        [[51.36, 35.66], [51.43, 35.66], [51.43, 35.73], [51.36, 35.73], [51.36, 35.66]]
+    ],
 }
 
 VALID_ITEM = {
