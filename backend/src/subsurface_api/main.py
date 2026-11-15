@@ -127,7 +127,7 @@ def get_sentinel2_catalog() -> Sentinel2Catalog:
 )
 async def search_sentinel2_catalog(
     request: Sentinel2CatalogSearchRequest,
-    catalog: Sentinel2Catalog = Depends(get_sentinel2_catalog),
+    catalog: Sentinel2Catalog = Depends(get_sentinel2_catalog),  # noqa: B008 - FastAPI DI pattern
 ) -> Sentinel2CatalogSearchResponse:
     """Search real Sentinel-2 L2A product metadata intersecting a validated survey polygon."""
     try:

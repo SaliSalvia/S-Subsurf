@@ -33,7 +33,10 @@ object PolygonMetrics {
      * The backend repeats these checks and remains the authoritative validator.
      */
     fun validationError(vertices: List<GeoPoint>): String? {
-        if (vertices.size < 3) return "At least three vertices are required."
+        if (vertices.size < MIN_VERTICES) return "At least three vertices are required."
+        if (vertices.size > MAX_VERTICES) {
+            return "A survey region may contain at most $MAX_VERTICES vertices."
+        }
         if (crossesAntimeridian(vertices)) {
             return "Polygons crossing the 180° meridian are not supported yet."
         }

@@ -16,7 +16,7 @@ The app pins MapLibre Native Android 13.7.1 using the OpenGL ES artifact to prio
 ## Current app behaviour
 
 - Map starts centred on Tehran as a neutral project default; users can pan/zoom anywhere.
-- Enable **Draw region**, tap 3–10 points, finish drawing, undo, or clear.
+- Enable **Draw region**, tap 3–10 points, finish drawing, undo, or clear. The draft survives rotation and process death (kept in the `MapViewModel` via `SavedStateHandle`).
 - Area is an approximate spherical calculation; antimeridian-crossing polygons are not supported by this MVP.
 - **Review area** sends the drawn GeoJSON polygon to `POST /v1/regions/validate` and displays the server-validated vertex count, approximate area, and bounding box.
 - **Sentinel-2 catalogue search** queries live Copernicus Data Space STAC metadata for the selected polygon, date interval, and scene-level cloud-cover limit.

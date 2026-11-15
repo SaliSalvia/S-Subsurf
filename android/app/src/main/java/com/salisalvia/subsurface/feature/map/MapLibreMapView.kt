@@ -44,11 +44,13 @@ private const val REGION_VERTICES_LAYER_ID = "survey-region-vertices"
 internal fun MapLibreMapView(
     vertices: List<GeoPoint>,
     onMapTap: (GeoPoint) -> Unit,
+    onMapError: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestOnMapTap by rememberUpdatedState(onMapTap)
+    val latestOnMapError by rememberUpdatedState(onMapError)
     val latestVertices by rememberUpdatedState(vertices)
     val sourceState = remember { mutableStateOf<GeoJsonSource?>(null) }
     val mapView = remember(context) {
@@ -111,41 +113,56 @@ internal fun MapLibreMapView(
         factory = { viewContext ->
             mapView.apply {
                 getMapAsync { map ->
-                    val styleJson = viewContext.assets.open("map/style.json")
-                        .bufferedReader()
-                        .use { it.readText() }
-                    map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
-                        map.cameraPosition = CameraPosition.Builder()
-                            .target(LatLng(35.6892, 51.3890))
-                            .zoom(5.0)
-                            .build()
+                    val styleJson = runCatching {
+                        viewContext.assets.open("map/style.json")
+                            .bufferedReader()
+                            .use { it.readText() }
+                    }.getOrElse { error ->
+                        latestOnMapError(
+                            "The base map style could not be loaded: " +
+                                (error.message ?: "unknown error"),
+                        )
+                        return@getMapAsync
+                    }
+                    runCatching {
+                        map.setStyle(Style.Builder().fromJson(styleJson)) { style ->
+                            map.cameraPosition = CameraPosition.Builder()
+                                .target(LatLng(35.6892, 51.3890))
+                                .zoom(5.0)
+                                .build()
 
-                        val source = GeoJsonSource(
-                            REGION_SOURCE_ID,
-                            FeatureCollection.fromFeatures(emptyArray()),
-                        )
-                        style.addSource(source)
-                        style.addLayer(
-                            LineLayer(REGION_LINE_LAYER_ID, REGION_SOURCE_ID).withProperties(
-                                lineColor(Color.rgb(241, 170, 71)),
-                                lineWidth(3.0f),
-                                lineJoin(LINE_JOIN_ROUND),
-                            ),
-                        )
-                        style.addLayer(
-                            CircleLayer(REGION_VERTICES_LAYER_ID, REGION_SOURCE_ID).withProperties(
-                                circleRadius(5.0f),
-                                circleColor(Color.WHITE),
-                                circleStrokeColor(Color.rgb(241, 170, 71)),
-                                circleStrokeWidth(2.0f),
-                            ),
-                        )
-                        sourceState.value = source
-                        map.addOnMapClickListener { coordinate ->
-                            latestOnMapTap(GeoPoint(coordinate.latitude, coordinate.longitude))
-                            true
+                            val source = GeoJsonSource(
+                                REGION_SOURCE_ID,
+                                FeatureCollection.fromFeatures(emptyArray()),
+                            )
+                            style.addSource(source)
+                            style.addLayer(
+                                LineLayer(REGION_LINE_LAYER_ID, REGION_SOURCE_ID).withProperties(
+                                    lineColor(Color.rgb(241, 170, 71)),
+                                    lineWidth(3.0f),
+                                    lineJoin(LINE_JOIN_ROUND),
+                                ),
+                            )
+                            style.addLayer(
+                                CircleLayer(REGION_VERTICES_LAYER_ID, REGION_SOURCE_ID).withProperties(
+                                    circleRadius(5.0f),
+                                    circleColor(Color.WHITE),
+                                    circleStrokeColor(Color.rgb(241, 170, 71)),
+                                    circleStrokeWidth(2.0f),
+                                ),
+                            )
+                            sourceState.value = source
+                            map.addOnMapClickListener { coordinate ->
+                                latestOnMapTap(GeoPoint(coordinate.latitude, coordinate.longitude))
+                                true
+                            }
+                            updateRegionSource(source, latestVertices)
                         }
-                        updateRegionSource(source, latestVertices)
+                    }.onFailure { error ->
+                        latestOnMapError(
+                            "The base map could not be initialised: " +
+                                (error.message ?: "unknown error"),
+                        )
                     }
                 }
             }

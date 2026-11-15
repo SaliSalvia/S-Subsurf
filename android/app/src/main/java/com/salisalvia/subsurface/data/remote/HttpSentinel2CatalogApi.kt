@@ -8,8 +8,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Instant
 
 /** HTTP implementation for the backend's bounded, provenance-preserving STAC search. */
@@ -25,53 +23,28 @@ class HttpSentinel2CatalogApi(
         cursor: String?,
         limit: Int,
     ): Sentinel2CatalogResult = withContext(Dispatchers.IO) {
-        require(vertices.size in 3..10) { "A survey region must contain 3–10 vertices." }
+        require(vertices.size in MIN_VERTICES..MAX_VERTICES) {
+            "A survey region must contain $MIN_VERTICES–$MAX_VERTICES vertices."
+        }
         require(datetimeStart < datetimeEnd) { "The start date must be earlier than the end date." }
         require(maxCloudCoverPercent in 0..100) { "The cloud-cover limit must be between 0 and 100%." }
-        require(limit in 1..50) { "A catalogue page must contain 1–50 scenes." }
+        require(limit in 1..MAX_PAGE_SIZE) { "A catalogue page must contain 1–$MAX_PAGE_SIZE scenes." }
 
-        val endpoint = URL("${baseUrl.trimEnd('/')}/v1/catalog/sentinel-2/search")
-        val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            doOutput = true
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            setRequestProperty("User-Agent", "SubsurfaceExplorer-Android/0.1.0")
-        }
-
-        try {
-            connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(
-                    createRequestBody(
-                        vertices,
-                        datetimeStart,
-                        datetimeEnd,
-                        maxCloudCoverPercent,
-                        cursor,
-                        limit,
-                    ),
-                )
-            }
-
-            val statusCode = connection.responseCode
-            val responseStream = if (statusCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream
-            }
-            val responseBody = responseStream
-                ?.bufferedReader(Charsets.UTF_8)
-                ?.use { it.readText() }
-                .orEmpty()
-            if (statusCode !in 200..299) {
-                throw IOException(readServerError(responseBody, statusCode))
-            }
-            parseResponse(responseBody)
-        } finally {
-            connection.disconnect()
-        }
+        val responseBody = HttpJsonClient.postJson(
+            endpoint = HttpJsonClient.endpointUrl(baseUrl, "/v1/catalog/sentinel-2/search"),
+            body = createRequestBody(
+                vertices,
+                datetimeStart,
+                datetimeEnd,
+                maxCloudCoverPercent,
+                cursor,
+                limit,
+            ),
+            connectTimeoutMs = CONNECT_TIMEOUT_MS,
+            readTimeoutMs = READ_TIMEOUT_MS,
+            failurePrefix = "Sentinel-2 catalogue search failed",
+        )
+        parseResponse(responseBody)
     }
 
     private fun createRequestBody(
@@ -82,20 +55,8 @@ class HttpSentinel2CatalogApi(
         cursor: String?,
         limit: Int,
     ): String {
-        val ring = JSONArray()
-        vertices.forEach { point ->
-            ring.put(JSONArray().put(point.longitude).put(point.latitude))
-        }
-        val first = vertices.first()
-        ring.put(JSONArray().put(first.longitude).put(first.latitude))
-
         val request = JSONObject()
-            .put(
-                "geometry",
-                JSONObject()
-                    .put("type", "Polygon")
-                    .put("coordinates", JSONArray().put(ring)),
-            )
+            .put("geometry", HttpJsonClient.polygonGeometry(vertices))
             .put("datetime_start", datetimeStart.toString())
             .put("datetime_end", datetimeEnd.toString())
             .put("max_cloud_cover_pct", maxCloudCoverPercent)
@@ -171,29 +132,11 @@ class HttpSentinel2CatalogApi(
         return json.optString(key).takeUnless { it.isBlank() || it == "null" }
     }
 
-    private fun readServerError(body: String, statusCode: Int): String {
-        val detail = runCatching { JSONObject(body).opt("detail") }.getOrNull()
-        val message = when (detail) {
-            is String -> detail
-            is JSONArray -> buildList {
-                for (index in 0 until detail.length()) {
-                    val item = detail.optJSONObject(index) ?: continue
-                    val location = item.optJSONArray("loc")
-                    val field = location?.let { values ->
-                        (0 until values.length()).joinToString(".") { values.optString(it) }
-                    }
-                    val explanation = item.optString("msg")
-                    add(if (field.isNullOrBlank()) explanation else "$field: $explanation")
-                }
-            }.joinToString("; ")
-            else -> null
-        }
-        return message?.takeIf(String::isNotBlank)
-            ?: "Sentinel-2 catalogue search failed (HTTP $statusCode). Check the API and try again."
-    }
-
     private companion object {
         const val CONNECT_TIMEOUT_MS = 8_000
         const val READ_TIMEOUT_MS = 20_000
+        const val MIN_VERTICES = 3
+        const val MAX_VERTICES = 10
+        const val MAX_PAGE_SIZE = 50
     }
 }

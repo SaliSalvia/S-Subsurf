@@ -4,12 +4,9 @@ import com.salisalvia.subsurface.BuildConfig
 import com.salisalvia.subsurface.core.model.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** HTTP implementation. All blocking network work is isolated from the UI thread. */
 class HttpRegionValidationApi(
@@ -18,59 +15,23 @@ class HttpRegionValidationApi(
 
     override suspend fun validate(vertices: List<GeoPoint>): RegionValidationResult =
         withContext(Dispatchers.IO) {
-            require(vertices.size in 3..10) { "A survey region must contain 3–10 vertices." }
-            val endpoint = URL("${baseUrl.trimEnd('/')}/v1/regions/validate")
-            val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                doOutput = true
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("User-Agent", "SubsurfaceExplorer-Android/0.1.0")
+            require(vertices.size in MIN_VERTICES..MAX_VERTICES) {
+                "A survey region must contain $MIN_VERTICES–$MAX_VERTICES vertices."
             }
-
-            try {
-                val requestBody = createRequestBody(vertices)
-                connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                    writer.write(requestBody)
-                }
-
-                val statusCode = connection.responseCode
-                val responseStream = if (statusCode in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-                val responseBody = responseStream
-                    ?.bufferedReader(Charsets.UTF_8)
-                    ?.use { it.readText() }
-                    .orEmpty()
-                if (statusCode !in 200..299) {
-                    throw IOException(readServerError(responseBody, statusCode))
-                }
-                parseResponse(responseBody)
-            } finally {
-                connection.disconnect()
-            }
-        }
-
-    private fun createRequestBody(vertices: List<GeoPoint>): String {
-        val ring = JSONArray()
-        vertices.forEach { point ->
-            ring.put(JSONArray().put(point.longitude).put(point.latitude))
-        }
-        val first = vertices.first()
-        ring.put(JSONArray().put(first.longitude).put(first.latitude))
-        return JSONObject()
-            .put(
-                "geometry",
-                JSONObject()
-                    .put("type", "Polygon")
-                    .put("coordinates", JSONArray().put(ring)),
+            val responseBody = HttpJsonClient.postJson(
+                endpoint = HttpJsonClient.endpointUrl(baseUrl, "/v1/regions/validate"),
+                body = createRequestBody(vertices),
+                connectTimeoutMs = CONNECT_TIMEOUT_MS,
+                readTimeoutMs = READ_TIMEOUT_MS,
+                failurePrefix = "Region validation failed",
             )
+            parseResponse(responseBody)
+        }
+
+    private fun createRequestBody(vertices: List<GeoPoint>): String =
+        JSONObject()
+            .put("geometry", HttpJsonClient.polygonGeometry(vertices))
             .toString()
-    }
 
     private fun parseResponse(body: String): RegionValidationResult {
         try {
@@ -92,29 +53,10 @@ class HttpRegionValidationApi(
         }
     }
 
-    private fun readServerError(body: String, statusCode: Int): String {
-        val detail = runCatching { JSONObject(body).opt("detail") }.getOrNull()
-        val message = when (detail) {
-            is String -> detail
-            is JSONArray -> buildList {
-                for (index in 0 until detail.length()) {
-                    val item = detail.optJSONObject(index) ?: continue
-                    val location = item.optJSONArray("loc")
-                    val field = location?.let { values ->
-                        (0 until values.length()).joinToString(".") { values.optString(it) }
-                    }
-                    val explanation = item.optString("msg")
-                    add(if (field.isNullOrBlank()) explanation else "$field: $explanation")
-                }
-            }.joinToString("; ")
-            else -> null
-        }
-        return message?.takeIf(String::isNotBlank)
-            ?: "Region validation failed (HTTP $statusCode). Check the API address and try again."
-    }
-
     private companion object {
         const val CONNECT_TIMEOUT_MS = 8_000
         const val READ_TIMEOUT_MS = 12_000
+        const val MIN_VERTICES = 3
+        const val MAX_VERTICES = 10
     }
 }

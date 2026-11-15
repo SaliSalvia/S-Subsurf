@@ -1,5 +1,7 @@
 package com.salisalvia.subsurface.feature.map
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,50 +29,49 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.salisalvia.subsurface.core.geometry.PolygonMetrics
-import com.salisalvia.subsurface.core.model.GeoPoint
 import com.salisalvia.subsurface.data.remote.RegionValidationResult
 import com.salisalvia.subsurface.data.remote.Sentinel2CatalogResult
 import com.salisalvia.subsurface.data.remote.Sentinel2Scene
 import java.time.Instant
 import java.util.Locale
+import kotlin.math.roundToInt
 
+/**
+ * Map workspace. The region draft lives in [MapViewModel] (backed by
+ * `SavedStateHandle`) so rotation or process death never discards it; only the
+ * catalogue-filter UI preferences are kept locally via `rememberSaveable`.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(
-    validationState: RegionValidationUiState,
-    catalogSearchState: CatalogSearchUiState,
-    onValidateRegion: (List<GeoPoint>) -> Unit,
-    onSearchSentinel2: (List<GeoPoint>, Int, Int) -> Unit,
-    onLoadMoreSentinel2: () -> Unit,
-    onDismissValidation: () -> Unit,
-    onDismissCatalogSearch: () -> Unit,
-) {
-    val vertices = remember { mutableStateListOf<GeoPoint>() }
-    var isDrawing by rememberSaveable { mutableStateOf(false) }
+fun MapScreen(viewModel: MapViewModel) {
+    val vertices by viewModel.vertices.collectAsStateWithLifecycle()
+    val isDrawing by viewModel.isDrawing.collectAsStateWithLifecycle()
+    val validationState by viewModel.validationState.collectAsStateWithLifecycle()
+    val catalogSearchState by viewModel.catalogSearchState.collectAsStateWithLifecycle()
+    val mapError by viewModel.mapError.collectAsStateWithLifecycle()
     var lookbackDays by rememberSaveable { mutableStateOf(90) }
     var maxCloudCoverPercent by rememberSaveable { mutableStateOf(30f) }
 
-    val validationError = remember(vertices.toList()) {
+    val validationError = remember(vertices) {
         PolygonMetrics.validationError(vertices)
     }
-    val areaSquareMeters = remember(vertices.toList(), validationError) {
+    val areaSquareMeters = remember(vertices, validationError) {
         if (validationError == null) {
             runCatching { PolygonMetrics.areaSquareMeters(vertices) }.getOrNull()
         } else null
@@ -128,10 +129,9 @@ fun MapScreen(
                         }
                         Button(onClick = {
                             if (isDrawing) {
-                                isDrawing = false
+                                viewModel.finishDrawing()
                             } else {
-                                if (vertices.size >= 3) vertices.clear()
-                                isDrawing = true
+                                viewModel.startDrawing()
                             }
                         }) {
                             Text(
@@ -190,7 +190,7 @@ fun MapScreen(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "Max scene cloud: ${maxCloudCoverPercent.toInt()}%",
+                                    "Max scene cloud: ${maxCloudCoverPercent.roundToInt()}%",
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.width(148.dp),
                                 )
@@ -207,10 +207,9 @@ fun MapScreen(
                                 enabled = validationState != RegionValidationUiState.Loading &&
                                     catalogSearchState != CatalogSearchUiState.Loading,
                                 onClick = {
-                                    onSearchSentinel2(
-                                        vertices.toList(),
+                                    viewModel.searchSentinel2Scenes(
                                         lookbackDays,
-                                        maxCloudCoverPercent.toInt(),
+                                        maxCloudCoverPercent.roundToInt(),
                                     )
                                 },
                             ) {
@@ -232,19 +231,19 @@ fun MapScreen(
                             OutlinedButton(
                                 modifier = Modifier.weight(1f),
                                 enabled = vertices.isNotEmpty(),
-                                onClick = { vertices.removeAt(vertices.lastIndex) },
+                                onClick = viewModel::undoLastVertex,
                             ) { Text("Undo point") }
                             OutlinedButton(
                                 modifier = Modifier.weight(1f),
                                 enabled = vertices.isNotEmpty(),
-                                onClick = { vertices.clear() },
+                                onClick = viewModel::clearVertices,
                             ) { Text("Clear") }
                             Button(
                                 modifier = Modifier.weight(1f),
                                 enabled = vertices.size >= 3 && validationError == null &&
                                     areaSquareMeters != null && !isDrawing &&
                                     validationState != RegionValidationUiState.Loading,
-                                onClick = { onValidateRegion(vertices.toList()) },
+                                onClick = viewModel::validateRegion,
                             ) { Text("Review area") }
                         }
                     }
@@ -258,13 +257,9 @@ fun MapScreen(
                 .padding(innerPadding),
         ) {
             MapLibreMapView(
-                vertices = vertices.toList(),
-                onMapTap = { point ->
-                    if (isDrawing && vertices.size < 10) {
-                        vertices.add(point)
-                        if (vertices.size == 10) isDrawing = false
-                    }
-                },
+                vertices = vertices,
+                onMapTap = viewModel::addVertex,
+                onMapError = viewModel::reportMapError,
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -295,20 +290,49 @@ fun MapScreen(
                     )
                 }
             }
+
+            if (mapError != null) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(12.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            mapError.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = viewModel::dismissMapError) {
+                            Text("Dismiss")
+                        }
+                    }
+                }
+            }
         }
     }
 
     when (val state = validationState) {
         is RegionValidationUiState.Success -> ValidationResultDialog(
             result = state.result,
-            onDismiss = onDismissValidation,
+            onDismiss = viewModel::dismissValidation,
         )
         is RegionValidationUiState.Error -> AlertDialog(
-            onDismissRequest = onDismissValidation,
+            onDismissRequest = viewModel::dismissValidation,
             title = { Text("Region validation failed") },
             text = { Text(state.message) },
             confirmButton = {
-                Button(onClick = onDismissValidation) { Text("Close") }
+                Button(onClick = viewModel::dismissValidation) { Text("Close") }
             },
         )
         RegionValidationUiState.Idle, RegionValidationUiState.Loading -> Unit
@@ -319,15 +343,15 @@ fun MapScreen(
             result = state.result,
             isLoadingMore = state.isLoadingMore,
             paginationError = state.paginationError,
-            onLoadMore = onLoadMoreSentinel2,
-            onDismiss = onDismissCatalogSearch,
+            onLoadMore = viewModel::loadMoreSentinel2Scenes,
+            onDismiss = viewModel::dismissCatalogSearch,
         )
         is CatalogSearchUiState.Error -> AlertDialog(
-            onDismissRequest = onDismissCatalogSearch,
+            onDismissRequest = viewModel::dismissCatalogSearch,
             title = { Text("Catalogue search failed") },
             text = { Text(state.message) },
             confirmButton = {
-                Button(onClick = onDismissCatalogSearch) { Text("Close") }
+                Button(onClick = viewModel::dismissCatalogSearch) { Text("Close") }
             },
         )
         CatalogSearchUiState.Idle, CatalogSearchUiState.Loading -> Unit

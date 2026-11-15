@@ -41,8 +41,8 @@ GeoJSON surface observations → map layers / export.
 
 ## Android layers
 
-- `feature/map`: map screen, drawing state, user interaction, and API validation state.
-- `data/remote`: bounded-timeout HTTP clients for region validation and catalog search.
+- `feature/map`: map screen, user interaction, and API state. The region draft (vertices + drawing flag) lives in `MapViewModel` and is mirrored into `SavedStateHandle`, so rotation and process death never discard it.
+- `data/remote`: bounded-timeout HTTP clients for region validation and catalog search, sharing connection setup, GeoJSON ring encoding, and FastAPI error parsing through `HttpJsonClient`.
 - `core/model`: app-owned coordinate model.
 - `core/geometry`: independent geodesic area estimate.
 - `ui/theme`: color scheme and typography entry point.

@@ -74,4 +74,39 @@ class PolygonMetricsTest {
         )
         assertEquals(null, PolygonMetrics.validationError(points))
     }
+
+    @Test
+    fun rejectsMoreThanTenVertices() {
+        // A small valid decagon plus one extra vertex.
+        val points = List(11) { index ->
+            val angle = index * Math.PI * 2.0 / 11.0
+            GeoPoint(35.0 + 0.01 * kotlin.math.sin(angle), 51.0 + 0.01 * kotlin.math.cos(angle))
+        }
+        assertEquals(
+            "A survey region may contain at most 10 vertices.",
+            PolygonMetrics.validationError(points),
+        )
+    }
+
+    @Test
+    fun rejectsNearZeroAreaPolygon() {
+        val points = listOf(
+            GeoPoint(0.0, 0.0),
+            GeoPoint(0.0, 1e-9),
+            GeoPoint(1e-9, 0.0),
+        )
+        assertEquals(
+            "The region area is too small or zero.",
+            PolygonMetrics.validationError(points),
+        )
+    }
+
+    @Test
+    fun acceptsExactlyTenVertices() {
+        val points = List(10) { index ->
+            val angle = index * Math.PI * 2.0 / 10.0
+            GeoPoint(35.0 + 0.01 * kotlin.math.sin(angle), 51.0 + 0.01 * kotlin.math.cos(angle))
+        }
+        assertEquals(null, PolygonMetrics.validationError(points))
+    }
 }

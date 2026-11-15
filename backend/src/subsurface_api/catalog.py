@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from math import isfinite
 from typing import Any
 from urllib.parse import quote
@@ -43,7 +43,7 @@ class CatalogProviderError(Exception):
 
 
 def _utc_isoformat(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _parse_datetime(value: Any) -> datetime:
@@ -136,7 +136,11 @@ def _parse_scene(raw_item: Any) -> Sentinel2Scene:
         product_id=product_id,
         acquired_at=_parse_datetime(acquired_at),
         cloud_cover_pct=cloud_cover,
-        platform=properties.get("platform") if isinstance(properties.get("platform"), str) else None,
+        platform=(
+            properties.get("platform")
+            if isinstance(properties.get("platform"), str)
+            else None
+        ),
         processing_version=(
             properties.get("processing:version")
             if isinstance(properties.get("processing:version"), str)
